@@ -1,0 +1,115 @@
+#!/usr/bin/env python
+# -*- coding: utf8
+import sys, tty, termios
+import time
+from subprocess import Popen, PIPE, check_call
+import readline
+
+
+adb = None
+
+def message():
+    print '''
+\033[31mCRAP CELL
+    \033[32mCRAP CELL
+        \033[33mCRAP CELL
+\033[0m Usage:
+    dial                - Dials the specified number
+        * Press 0-9, * or # to send a DTMF tone
+        * Press H to hang up
+    wait                - Waits for calls from people
+        * Press A to accept
+        * Press H to hang up
+        * Press Q to stop listening
+
+#
+
+'''
+
+def connect():
+    global adb
+    check_call(['adb','root'])
+    adb = Popen(['adb','shell'], stdin=PIPE, stdout=PIPE)
+
+def cmd_dial(number):
+    print "\033[1;36m Dialing %s\033[0m" % (number)
+    ### This will work on any copy of android
+    adb.stdin.write('am start -a android.intent.action.CALL -d tel:+%s\n' % (number))
+
+def cmd_keypad():
+    print "\033[1;36m Key pad on \033[0m"
+    ### This will only work on my phone, probably
+    adb.stdin.write('input tap 546 905\n')
+
+def cmd_speakerphone():
+    print "\033[1;36m Speakerphone on \033[0m"
+    ### For Android 7 and probably 8
+    adb.stdin.write('service call audio 29 i32 1\n')
+
+def cmd_hangup():
+    print "\033[1;31m Hangup \033[0m"
+    ### This will work on any copy of android
+    adb.stdin.write('input keyevent KEYCODE_ENDCALL\n')
+
+def cmd_pickup():
+    print "\033[1;32m Pickup \033[0m"
+    ### This will work on any copy of android
+    adb.stdin.write('input keyevent KEYCODE_CALL\n')
+
+def cmd_dtmf(key):
+    keymap = {'0': '0', '1': '1', '2': '2', '3':'3', '4':'4', '5':'5', '6':'6', '7':'7', '8': '8', '9': '9', '*': 'STAR', '#': 'POUND' }
+    try:
+        code = keymap[key]
+        sys.stdout.write("\n<%s>\n" % (code))
+        adb.stdin.write('input keyevent KEYCODE_%s\n' % (code))
+    except KeyError:
+        print "Fuk off"
+
+def sanitize_number(num):
+    ### Works in USA and CANADA
+    return "1" + num.replace(' ','').replace('-','')
+
+def menu_dial():
+    number = sanitize_number(raw_input('📞 .... '))
+    print ">>>",number,"<<<"
+    cmd_dial(number)
+    time.sleep(1)
+    cmd_speakerphone()
+    raw_input("Wait for the call to connect....")
+    cmd_keypad()
+    menu_dtmf()
+
+
+def menu_dtmf():
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(sys.stdin.fileno())
+        while True:
+            ch = sys.stdin.read(1)
+            if ch == 'H':
+                cmd_hangup()
+                break
+            else:
+                cmd_dtmf(ch)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+     
+def menu_wait():
+    print "Sorry"
+
+
+def main():
+    connect()
+    message()
+    while True:
+        cmd = raw_input('\033[0;35mCRAP CELL!\033[1m ')
+        print '\033[0m',
+        if cmd == 'dial':
+            menu_dial()
+        elif cmd == 'wait':
+            menu_wait()
+        else:
+            print "Nope"
+
+main()
